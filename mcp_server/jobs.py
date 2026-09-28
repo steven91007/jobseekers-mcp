@@ -74,6 +74,7 @@ def search(
     work_type: str = "",
     job_type: str = "",
     english_only: bool = False,
+    posted_within: str = "",
     root=obs.NOOP,
 ) -> dict:
     keyword = keyword.strip()
@@ -85,6 +86,9 @@ def search(
         raise ToolInputError(f"work_type must be one of {sorted(ls.WORK_TYPE_MAP)} or empty")
     if job_type and job_type not in ls.JOB_TYPE_MAP:
         raise ToolInputError(f"job_type must be one of {sorted(ls.JOB_TYPE_MAP)} or empty")
+    posted_within = posted_within.strip().lower()
+    if posted_within and posted_within not in ls.POSTED_WITHIN_MAP:
+        raise ToolInputError(f"posted_within must be one of {sorted(ls.POSTED_WITHIN_MAP)} or empty")
     max_results = max(1, min(int(max_results), MAX_RESULTS_CAP))
     locations = ls._parse_locations(location)
 
@@ -97,6 +101,7 @@ def search(
             work_type=work_type,
             job_type=job_type,
             english_only=english_only,
+            posted_within=posted_within,
             timeout=SEARCH_TIMEOUT,
         )
     except ls.ScraperError as e:

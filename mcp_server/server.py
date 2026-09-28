@@ -114,6 +114,8 @@ def search_jobs(
         "or empty for any."))] = "",
     english_only: Annotated[bool, Field(
         description="Drop postings whose title or company is not in Latin script.")] = False,
+    posted_within: Annotated[str, Field(description=(
+        'Only postings from the last "24h", "7d" or "30d"; empty for any age.'))] = "",
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Search LinkedIn job postings, newest first.
@@ -123,7 +125,8 @@ def search_jobs(
     title, company, location, posted_date and url.
     """
     args = dict(keyword=keyword, location=location, max_results=max_results,
-                work_type=work_type, job_type=job_type, english_only=english_only)
+                work_type=work_type, job_type=job_type, english_only=english_only,
+                posted_within=posted_within)
     return _traced(ctx, name=NAMES.SEARCH_JOBS, as_type="retriever", tool="search_jobs",
                    feature="jobs", input=args, fn=lambda root: jobs.search(**args, root=root))
 

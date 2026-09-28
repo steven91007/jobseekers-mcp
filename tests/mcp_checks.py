@@ -102,6 +102,9 @@ check("region preset expanded in searched_locations",
       out["searched_locations"] == ["Berlin", "Denmark", "Sweden", "Norway", "Finland", "Iceland"])
 check("empty keyword rejected", raises(lambda: jobs.search("  "), jobs.ToolInputError))
 check("bad work_type rejected", raises(lambda: jobs.search("x", work_type="moon"), jobs.ToolInputError))
+jobs.search("x", posted_within="7D")
+check("posted_within normalized and passed through", calls["search"][-1]["posted_within"] == "7d")
+check("bad posted_within rejected", raises(lambda: jobs.search("x", posted_within="1y"), jobs.ToolInputError))
 search_mode["raise"] = ls.Blocked("HTTP 999")
 try:
     jobs.search("x")
