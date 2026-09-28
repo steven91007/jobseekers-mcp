@@ -1,28 +1,31 @@
 """Offline checks for the MCP server: tool logic, the MCP protocol surface, gitkb
 round-trip, the bot's read-only view, and the Langfuse trace shape.
 
-LinkedIn is faked; Langfuse spans go to an in-memory exporter. Needs Python 3.10+
-with requirements.txt installed (the mcp SDK): .venv/bin/python tests/mcp_checks.py
+LinkedIn is faked; Langfuse spans go to an in-memory exporter. Needs this package
+installed (pip install -e .) and a Jobseekers checkout, found through
+JOBSEEKERS_ROOT or as the parent of this repository when it is a submodule:
+    JOBSEEKERS_ROOT=../Jobseekers- .venv/bin/python tests/mcp_checks.py
 (pytest runs it in a subprocess through tests/test_mcp.py)
 """
 import asyncio, json, os, pathlib, shutil, sys, tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "tests"))
+sys.path.insert(0, str(ROOT))           # this repository's mcp_server, not an installed copy
+sys.path.insert(1, str(ROOT / "tests"))
 os.environ["MCP_LINKEDIN_MIN_GAP"] = "0"
 for key in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"):
     os.environ.pop(key, None)
 
 from mcp import Client
 
+import mcp_server  # first: puts the Jobseekers checkout on sys.path
 import linkedin_scraper as ls
 import visa
 from bot import db as bot_db
 from mcp_server import jobs, kb, subscriptions
 from mcp_server import observability as obs
 from mcp_server.server import mcp
-from test_gitkb import make_repo
+from gitrepo import make_repo
 
 ok = True
 

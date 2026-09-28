@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The server wraps modules from the Jobseekers project; test against its master.
+      - uses: actions/checkout@v7
+        with:
+          repository: steven91007/Jobseekers-
+          path: jobseekers
+          submodules: false
+
+      - uses: astral-sh/setup-uv@v10
+
+      - name: Install
+        run: |
+          uv venv --python 3.13
+          uv pip install -e ".[test]"
+
+      - name: Test
+        env:
+          JOBSEEKERS_ROOT: ${{ github.workspace }}/jobseekers
+        run: .venv/bin/python -m pytest -q
+
+      - name: Server starts and lists its tools
+        env:
+          JOBSEEKERS_ROOT: ${{ github.workspace }}/jobseekers
+        run: .venv/bin/jobseekers-mcp --check

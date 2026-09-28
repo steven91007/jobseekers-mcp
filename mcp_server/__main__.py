@@ -1,4 +1,4 @@
-"""Entry point: python -m mcp_server [--check]
+"""Entry point: python -m mcp_server [--check]  (or the jobseekers-mcp script)
 
 Serves MCP over stdio. stdout is the protocol channel, so logs go to stderr.
 `--check` prints the registered tools and the Langfuse connection state, then exits.
@@ -10,9 +10,8 @@ import logging
 import os
 import signal
 import sys
-from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from ._core import ROOT
 
 
 def _load_env() -> None:
@@ -21,7 +20,7 @@ def _load_env() -> None:
     except ImportError:  # pragma: no cover
         return
     # MCP clients start the server from any working directory; resolve .env from the project.
-    env_file = os.getenv("JOBSEEKERS_ENV_FILE", "").strip() or str(PROJECT_ROOT / ".env")
+    env_file = os.getenv("JOBSEEKERS_ENV_FILE", "").strip() or str(ROOT / ".env")
     load_dotenv(env_file)
 
 
@@ -36,7 +35,6 @@ def main(argv: list[str] | None = None) -> int:
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
     )
-    sys.path.insert(0, str(PROJECT_ROOT))
 
     from . import observability as obs
     from .server import mcp
@@ -55,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{len(tools)} tools: {', '.join(t.name for t in tools)}", file=sys.stderr)
             ok, msg = obs.auth_check() if live else (False, "keys not set; tracing off")
             print(f"Langfuse: {'auth OK' if ok else msg} (session {obs.SESSION_ID})", file=sys.stderr)
+            print(f"Jobseekers project: {ROOT}", file=sys.stderr)
             return 0 if (ok or not live) else 1
         mcp.run("stdio")
         return 0

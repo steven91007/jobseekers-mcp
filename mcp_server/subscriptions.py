@@ -13,7 +13,8 @@ from pathlib import Path
 
 from bot import db as bot_db
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from ._core import ROOT
+
 
 
 class BotDbMissing(RuntimeError):
@@ -22,7 +23,7 @@ class BotDbMissing(RuntimeError):
 
 def db_path() -> Path:
     p = Path(os.getenv("JOBBOT_DB", "").strip() or "data/jobs.db")
-    return p if p.is_absolute() else PROJECT_ROOT / p
+    return p if p.is_absolute() else ROOT / p
 
 
 def _connect() -> sqlite3.Connection:

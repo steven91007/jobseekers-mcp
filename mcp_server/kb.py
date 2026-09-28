@@ -21,8 +21,8 @@ from gitkb.config import Config, load
 from gitkb.summarize import MappingSummarizer, parse_summaries
 
 from . import observability as obs
+from ._core import ROOT
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
 HEX64 = 64
 
 
@@ -31,7 +31,7 @@ class KbError(RuntimeError):
 
 
 def _config() -> tuple[Config, Path]:
-    start = Path(os.getenv("GITKB_REPO", "").strip() or PROJECT_ROOT)
+    start = Path(os.getenv("GITKB_REPO", "").strip() or ROOT)
     root = gitio.repo_root(start)
     return load(root), root
 

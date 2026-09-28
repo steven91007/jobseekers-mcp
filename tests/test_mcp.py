@@ -2,7 +2,8 @@
 
 The checks patch linkedin_scraper and install a process-wide OpenTelemetry tracer
 provider for Langfuse, so they run in their own interpreter rather than inside the
-pytest process, where they would leak into the jobagent tests.
+pytest process, where they would leak into other tests (the Jobseekers repo runs
+this file from its own test suite too).
 """
 import pathlib, subprocess, sys
 
