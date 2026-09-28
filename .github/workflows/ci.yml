@@ -18,7 +18,8 @@ jobs:
           path: jobseekers
           submodules: false
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes full version tags only; there is no @v10
+      - uses: astral-sh/setup-uv@v10.2.0
 
       - name: Install
         run: |
