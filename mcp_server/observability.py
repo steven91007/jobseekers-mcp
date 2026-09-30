@@ -60,6 +60,11 @@ class NAMES:
     KB_IMPORT = "import-commit-summaries"
     SUBS_LIST = "list-subscriptions"
     BOT_STATUS = "get-bot-status"
+    GMAIL_SEARCH = "search-gmail"
+    GMAIL_READ = "read-gmail-message"
+    SHEET_LIST = "list-sheet-applications"
+    SHEET_UPDATE = "update-sheet-application"
+    SHEET_APPEND = "append-sheet-application"
 
 
 # The MCP SDK names its OpenTelemetry tracer this; its spans are dropped from export.

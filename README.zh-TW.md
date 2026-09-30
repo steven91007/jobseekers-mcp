@@ -16,6 +16,9 @@
 | `gitkb_search` / `gitkb_show` / `gitkb_log` / `gitkb_history` | 查詢 git 歷史知識庫：改程式前先查「為什麼當初這樣寫」 |
 | `gitkb_pending` / `gitkb_import_summaries` | 讓 agent 為還沒摘要的 commit 撰寫並匯入摘要 |
 | `list_subscriptions` / `bot_status` | Discord bot 的訂閱與上次推播狀態（唯讀，以 `mode=ro` 開啟資料庫） |
+| `gmail_search` / `gmail_read` | 搜尋使用者的 Gmail，並以純文字讀取單封信（OAuth 權限為唯讀） |
+| `sheet_applications` | 使用者的求職紀錄 Google Sheet：每一列，以及標題對應到的欄位（公司、職位、狀態…） |
+| `sheet_update_application` / `sheet_add_application` | 修改某列的儲存格（若該列已不是預期的公司會拒絕寫入），或新增一筆投遞紀錄 |
 
 另外提供 resource `jobs://regions`（地區預設清單）和 prompt `gitkb_update`（更新知識庫的步驟）。
 
@@ -72,6 +75,7 @@ JOBSEEKERS_ROOT=/path/to/Jobseekers- .venv/bin/jobseekers-mcp --check
 | `MCP_LANGFUSE_MASK` | 設 `0` 可關閉 email／電話／金鑰遮罩（預設開啟） |
 | `MCP_LINKEDIN_MIN_GAP` | 兩次 LinkedIn 工具呼叫之間的最小秒數，預設 3 |
 | `MCP_SESSION_ID` | 覆寫 Langfuse session id（預設每個 server 行程一個） |
+| `GOOGLE_OAUTH_CLIENT_FILE` / `GOOGLE_TOKEN_FILE` / `JOBTRACKER_*` | Gmail 與表單設定，由 Jobseekers 的 `jobtracker` 讀取。請先在那裡執行 `python -m jobtracker auth` 登入一次；server 不會開瀏覽器 |
 | `GITKB_REPO` / `JOBBOT_DB` | gitkb 要讀的 repo／bot 資料庫路徑，預設是 Jobseekers 專案 |
 
 ## Langfuse 追蹤
