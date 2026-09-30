@@ -2,7 +2,7 @@
 
 **English** | [繁體中文](README.zh-TW.md)
 
-The [MCP](https://modelcontextprotocol.io/) server for [Jobseekers](https://github.com/steven91007/Jobseekers-). It lets agents such as Claude Code call LinkedIn job search, visa-sponsorship checks, the git-history knowledge base (gitkb) and the Discord bot's status directly, and every call can be traced in [Langfuse](https://langfuse.com/).
+The [MCP](https://modelcontextprotocol.io/) server for [Jobseekers](https://github.com/steven91007/Jobseekers-). It lets agents such as Claude Code call LinkedIn job search, visa-sponsorship checks, Gmail and a job-application Google Sheet, the git-history knowledge base (gitkb) and the Discord bot's status directly, and every call can be traced in [Langfuse](https://langfuse.com/).
 
 This repository holds only the MCP layer. The scraper, visa rules, gitkb and bot database code live in the Jobseekers project, and the server imports them from there instead of keeping a copy, so a fix on either side is always shared.
 
@@ -16,6 +16,9 @@ This repository holds only the MCP layer. The scraper, visa rules, gitkb and bot
 | `gitkb_search` / `gitkb_show` / `gitkb_log` / `gitkb_history` | Query the git knowledge base: check why the code is the way it is before changing it |
 | `gitkb_pending` / `gitkb_import_summaries` | Let the agent write and import summaries for unsummarized commits |
 | `list_subscriptions` / `bot_status` | The Discord bot's subscriptions and last push (read-only; the database is opened with `mode=ro`) |
+| `gmail_search` / `gmail_read` | Search the user's Gmail and read a message as plain text (read-only OAuth scope) |
+| `sheet_applications` | The user's job-application Google Sheet: each row, with headers mapped to fields (company, role, status, ...) |
+| `sheet_update_application` / `sheet_add_application` | Change cells of one row (refused if the row no longer holds the expected company) or append an application |
 
 There is also a `jobs://regions` resource (the region presets) and a `gitkb_update` prompt (the steps to update the knowledge base).
 
@@ -72,6 +75,7 @@ Settings are read from the Jobseekers project's `.env`; set `JOBSEEKERS_ENV_FILE
 | `MCP_LANGFUSE_MASK` | Set to `0` to turn off masking of emails, phone numbers and keys (on by default) |
 | `MCP_LINKEDIN_MIN_GAP` | Minimum seconds between two LinkedIn tool calls, 3 by default |
 | `MCP_SESSION_ID` | Override the Langfuse session id (one per server process by default) |
+| `GOOGLE_OAUTH_CLIENT_FILE` / `GOOGLE_TOKEN_FILE` / `JOBTRACKER_*` | Gmail and sheet settings, read by Jobseekers' `jobtracker`. Sign in once with `python -m jobtracker auth` there; the server never opens a browser |
 | `GITKB_REPO` / `JOBBOT_DB` | The repository gitkb reads and the bot database path; both default to the Jobseekers project |
 
 ## Langfuse tracing

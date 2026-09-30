@@ -1,5 +1,5 @@
 """Offline checks for the MCP server: tool logic, the MCP protocol surface, gitkb
-round-trip, the bot's read-only view, and the Langfuse trace shape.
+round-trip, the bot's read-only view, Gmail + Sheet tracking, and the Langfuse trace shape.
 
 LinkedIn is faked; Langfuse spans go to an in-memory exporter. Needs this package
 installed (pip install -e .) and a Jobseekers checkout, found through
@@ -22,7 +22,7 @@ import mcp_server  # first: puts the Jobseekers checkout on sys.path
 import linkedin_scraper as ls
 import visa
 from bot import db as bot_db
-from mcp_server import jobs, kb, subscriptions
+from mcp_server import jobs, kb, subscriptions, tracker
 from mcp_server import observability as obs
 from mcp_server.server import mcp
 from gitrepo import make_repo
@@ -140,7 +140,8 @@ async def protocol_checks():
         check("all tools registered", names == {
             "search_jobs", "get_job_detail", "check_visa", "gitkb_search", "gitkb_show",
             "gitkb_log", "gitkb_history", "gitkb_pending", "gitkb_import_summaries",
-            "list_subscriptions", "bot_status"}, sorted(names))
+            "list_subscriptions", "bot_status", "gmail_search", "gmail_read", "sheet_applications",
+            "sheet_update_application", "sheet_add_application"}, sorted(names))
         r = await client.call_tool("search_jobs", {"keyword": "LLM Engineer", "location": "Dublin"})
         check("search_jobs over MCP returns structured jobs",
               not r.is_error and r.structured_content["count"] == 2)
@@ -216,6 +217,105 @@ try:
 finally:
     os.environ.pop("JOBBOT_DB", None)
     shutil.rmtree(tmp, ignore_errors=True)
+
+
+print("\n[5b] Gmail + application sheet (fake Google clients)")
+try:
+    from jobtracker import config as jt_config
+    from jobtracker.gmail import Email, GmailError
+    from jobtracker.sheets import Application, ColumnMap, SheetError
+except ImportError:
+    print("  SKIP  this Jobseekers checkout has no jobtracker package")
+else:
+    import httplib2
+    from googleapiclient.errors import HttpError
+
+    MAIL = Email(id="m1", thread_id="t1", received_at="2026-09-29T08:00:00+00:00", sender="Acme Talent",
+                 sender_email="jobs@acme.io", to="me@example.com", subject="Interview invitation",
+                 snippet="We would like to invite you", labels=["INBOX"], body="Hi, can you talk on Friday?")
+
+    class FakeGmailClient:
+        def search(self, q, n):
+            self.last_query = q
+            return [MAIL][:n]
+
+        def get(self, mid, max_chars=8000):
+            if mid == "forbidden":
+                raise HttpError(httplib2.Response({"status": 403}),
+                                b'{"error": {"message": "Gmail API has not been used in project 1"}}')
+            if mid != "m1":
+                raise GmailError(f"no message {mid}")
+            return MAIL
+
+    class FakeSheet:
+        spreadsheet_id, tab = "sid", "求職紀錄"
+
+        def __init__(self):
+            self.cols = ColumnMap.detect(["公司", "職位", "狀態"], jt_config.COLUMN_ALIASES)
+            self.rows = {2: ["Acme AI", "AI Engineer", "Applied"]}
+
+        def columns(self):
+            return self.cols
+
+        def applications(self):
+            return [Application(r, dict(zip(self.cols.headers, v)),
+                                {k: v[i] for k, i in self.cols.fields.items()}) for r, v in self.rows.items()]
+
+        def find(self, text):
+            return [a for a in self.applications() if text.lower() in a.fields["company"].lower()]
+
+        def update(self, row, changes, expect_company=None):
+            if expect_company and expect_company.lower() not in self.rows[row][0].lower():
+                raise SheetError(f"row {row} is now {self.rows[row][0]!r}; the sheet changed")
+            for k, v in changes.items():
+                self.rows[row][self.cols.column(k)] = v
+            return {"row": row, "written": changes}
+
+        def append(self, values):
+            return {"row": 3, "written": values}
+
+    fake_gmail, fake_sheet = FakeGmailClient(), FakeSheet()
+    tracker.reset()
+    tracker._settings = lambda: jt_config.Settings(
+        client_secret_file=pathlib.Path("/nonexistent"), token_file=pathlib.Path("/nonexistent"),
+        sheet_id="sid", sheet_tab="", header_row=1, gmail_query="label:jobs")
+    tracker._gmail = lambda: fake_gmail
+    tracker._sheet = lambda: fake_sheet
+
+    async def tracker_calls():
+        async with Client(mcp) as client:
+            r = await client.call_tool("gmail_search", {})
+            check("gmail_search uses the configured query",
+                  not r.is_error and fake_gmail.last_query == "label:jobs"
+                  and r.structured_content["emails"][0]["sender_domain"] == "acme.io")
+            r = await client.call_tool("gmail_read", {"message_id": "m1"})
+            check("gmail_read returns the body", not r.is_error and "Friday" in r.structured_content["body"])
+            r = await client.call_tool("gmail_read", {"message_id": "forbidden"})
+            check("Google 403 -> readable tool error with a hint",
+                  r.is_error and "Google API 403" in r.content[0].text and "enabled" in r.content[0].text,
+                  r.content[0].text)
+            r = await client.call_tool("sheet_applications", {"find": "acme"})
+            sc = r.structured_content
+            check("sheet_applications maps headers to fields",
+                  not r.is_error and sc["columns"] == {"company": "公司", "role": "職位", "status": "狀態"}
+                  and sc["applications"][0]["row"] == 2 and sc["applications"][0]["status"] == "Applied", sc)
+            r = await client.call_tool("sheet_update_application",
+                                       {"row": 2, "changes": {"status": "Interview"}, "expect_company": "Zalando"})
+            check("update into a moved row is refused", r.is_error and "sheet changed" in r.content[0].text)
+            r = await client.call_tool("sheet_update_application",
+                                       {"row": 2, "changes": {"status": "Interview"}, "expect_company": "Acme"})
+            check("update writes", not r.is_error and fake_sheet.rows[2][2] == "Interview")
+            r = await client.call_tool("sheet_update_application", {"row": 1, "changes": {"status": "x"}})
+            check("schema rejects the header row", r.is_error)
+            r = await client.call_tool("sheet_add_application", {"values": {"company": "Mistral"}})
+            check("add returns the new row", not r.is_error and r.structured_content["row"] == 3)
+            tools = {t.name: t for t in (await client.list_tools()).tools}
+            check("sheet writes are not marked read-only",
+                  tools["sheet_update_application"].annotations.read_only_hint is False
+                  and tools["sheet_update_application"].annotations.destructive_hint is True
+                  and tools["gmail_read"].annotations.read_only_hint is True)
+
+    asyncio.run(tracker_calls())
 
 
 print("\n[6] Langfuse trace shape (in-memory exporter)")

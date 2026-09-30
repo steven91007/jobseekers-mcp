@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "jobseekers-mcp"
 version = "1.0.0"
-description = "MCP server for Jobseekers: LinkedIn job search, visa-sponsorship checks, gitkb and Discord-bot status, traced in Langfuse"
+description = "MCP server for Jobseekers: LinkedIn job search, visa-sponsorship checks, Gmail and a job-application Google Sheet, gitkb and Discord-bot status, traced in Langfuse"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -15,6 +15,9 @@ dependencies = [
     # imported by the Jobseekers modules the server wraps (linkedin_scraper, visa)
     "requests>=2.32",
     "beautifulsoup4>=4.12",
+    # imported by jobtracker (Gmail + Google Sheets)
+    "google-api-python-client>=2.150",
+    "google-auth-oauthlib>=1.2",
 ]
 
 [project.optional-dependencies]

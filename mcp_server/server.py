@@ -21,7 +21,7 @@ from gitkb import db as kb_db, gitio
 from gitkb.config import ConfigError
 from gitkb.summarize import SummaryError
 
-from . import jobs, kb, subscriptions
+from . import jobs, kb, subscriptions, tracker
 from . import observability as obs
 from .observability import NAMES
 
@@ -40,10 +40,23 @@ why code changed. gitkb_pending + gitkb_import_summaries add summaries for new
 commits (the gitkb_update prompt walks through it).
 
 Discord bot: list_subscriptions and bot_status are read-only.
+
+Application tracking: gmail_search / gmail_read read the user's Gmail (read-only);
+sheet_applications reads their job-application Google Sheet, whose columns are
+reported both by header and by canonical field (company, role, status, applied_at,
+...). sheet_update_application and sheet_add_application change the sheet: say what
+you will write and get the user's go-ahead first, and pass expect_company when
+updating so a re-sorted sheet is not overwritten in the wrong row.
 """
 
 READ_ONLY_WEB = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 READ_ONLY_LOCAL = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+UPDATES_REMOTE = ToolAnnotations(
+    read_only_hint=False, destructive_hint=True, idempotent_hint=True, open_world_hint=True
+)
+APPENDS_REMOTE = ToolAnnotations(
+    read_only_hint=False, destructive_hint=False, idempotent_hint=False, open_world_hint=True
+)
 WRITES_LOCAL = ToolAnnotations(
     read_only_hint=False, destructive_hint=False, idempotent_hint=True, open_world_hint=False
 )
@@ -58,6 +71,7 @@ EXPECTED_ERRORS = (
     ConfigError,
     SummaryError,
     subscriptions.BotDbMissing,
+    tracker.TrackerError,
 )
 
 mcp = MCPServer(name="jobseekers", instructions=INSTRUCTIONS, version="1.0.0")
@@ -288,3 +302,73 @@ def bot_status(ctx: Context | None = None) -> dict[str, Any]:
     failing, and how many postings it has already pushed."""
     return _traced(ctx, name=NAMES.BOT_STATUS, as_type="retriever", tool="bot_status",
                    feature="bot", input={}, fn=lambda root: subscriptions.bot_status())
+
+
+# --- application tracking (Gmail + Google Sheets) --------------------------------
+
+
+@mcp.tool(annotations=READ_ONLY_WEB)
+def gmail_search(
+    query: Annotated[str, Field(description=(
+        'Gmail search syntax, e.g. "from:greenhouse.io newer_than:14d" or "subject:interview". '
+        "Empty uses the configured job-mail query (JOBTRACKER_GMAIL_QUERY)."))] = "",
+    max_results: Annotated[int, Field(ge=1, le=100, description="Messages to return, newest first.")] = 20,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Search the user's Gmail (read-only). Returns id, received_at, sender, sender_email,
+    sender_domain, subject, snippet and labels per message, without bodies; read one
+    with gmail_read."""
+    args = {"query": query, "max_results": max_results}
+    return _traced(ctx, name=NAMES.GMAIL_SEARCH, as_type="retriever", tool="gmail_search",
+                   feature="tracker", input=args, fn=lambda root: tracker.gmail_search(**args))
+
+
+@mcp.tool(annotations=READ_ONLY_WEB)
+def gmail_read(
+    message_id: Annotated[str, Field(description="Message id from gmail_search.")],
+    max_chars: Annotated[int, Field(ge=200, le=50000, description="Truncate the body after this many characters.")] = 8000,
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Read one Gmail message as plain text (HTML mail is converted), with its headers."""
+    args = {"message_id": message_id, "max_chars": max_chars}
+    return _traced(ctx, name=NAMES.GMAIL_READ, as_type="retriever", tool="gmail_read",
+                   feature="tracker", input=args, fn=lambda root: tracker.gmail_read(**args))
+
+
+@mcp.tool(annotations=READ_ONLY_WEB)
+def sheet_applications(
+    find: Annotated[str, Field(description="Only rows whose company or role contains this; empty for all.")] = "",
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """The user's job-application sheet: headers, which header is which canonical field
+    (company, role, status, applied_at, location, link, source, contact, notes,
+    last_update), and each application with its sheet row number."""
+    return _traced(ctx, name=NAMES.SHEET_LIST, as_type="retriever", tool="sheet_applications",
+                   feature="tracker", input={"find": find}, fn=lambda root: tracker.sheet_applications(find))
+
+
+@mcp.tool(annotations=UPDATES_REMOTE)
+def sheet_update_application(
+    row: Annotated[int, Field(ge=2, description="Sheet row number from sheet_applications.")],
+    changes: Annotated[dict[str, str], Field(min_length=1, description=(
+        'Cells to set, keyed by canonical field or header: {"status": "Interview", "notes": "..."}.'))],
+    expect_company: Annotated[str, Field(description=(
+        "The company you expect in that row; the write is refused if the row now holds another."))] = "",
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Overwrite cells of one application row in the user's Google Sheet."""
+    args = {"row": row, "changes": changes, "expect_company": expect_company}
+    return _traced(ctx, name=NAMES.SHEET_UPDATE, as_type="tool", tool="sheet_update_application",
+                   feature="tracker", input=args, fn=lambda root: tracker.sheet_update(**args))
+
+
+@mcp.tool(annotations=APPENDS_REMOTE)
+def sheet_add_application(
+    values: Annotated[dict[str, str], Field(min_length=1, description=(
+        'The new row, keyed by canonical field or header: {"company": "Acme", "role": "AI Engineer", '
+        '"status": "Applied", "applied_at": "2026-09-30"}.'))],
+    ctx: Context | None = None,
+) -> dict[str, Any]:
+    """Append a new application row to the user's Google Sheet."""
+    return _traced(ctx, name=NAMES.SHEET_APPEND, as_type="tool", tool="sheet_add_application",
+                   feature="tracker", input={"values": values}, fn=lambda root: tracker.sheet_append(values))
